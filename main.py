@@ -4,7 +4,6 @@ from discord.ext import commands, tasks
 import os
 from flask import Flask
 from threading import Thread
-from waitress import serve  # New production server
 
 # --- PRODUCTION KEEP-ALIVE ---
 app = Flask('')
