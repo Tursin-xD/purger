@@ -16,7 +16,7 @@ def run_flask():
     port = int(os.environ.get("PORT", 10000))
     serve(app, host='0.0.0.0', port=port)
 
-# --- BOT CONFIG ---
+# --- CONFIG ---
 TARGET_USER_ID = 1459506686157914213
 ROLE_NAME = "Crabby"
 
@@ -80,8 +80,7 @@ if __name__ == "__main__":
     t.start()
     
     token = os.environ.get('DISCORD_TOKEN')
-    if token:
-        bot.run(token)
-    else:
+    if not token:
         print("ERROR: DISCORD_TOKEN missing")
         sys.exit(1)
+    bot.run(token)
