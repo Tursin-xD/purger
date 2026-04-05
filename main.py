@@ -2,14 +2,19 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 import os
-import asyncio
+import sys
+import logging
 from flask import Flask
 from threading import Thread
 from waitress import serve
 
+# Kill all background noise
+logging.getLogger('discord').setLevel(logging.CRITICAL)
+logging.getLogger('waitress').setLevel(logging.CRITICAL)
+
 app = Flask('')
 @app.route('/')
-def home(): return "OK"
+def home(): return ""
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
@@ -54,10 +59,13 @@ async def ping(interaction: discord.Interaction):
 async def clear(interaction: discord.Interaction, amount: int):
     await interaction.response.defer(ephemeral=True)
     await interaction.channel.purge(limit=amount)
-    await interaction.followup.send("Done", ephemeral=True)
+    await interaction.followup.send("ok", ephemeral=True)
 
 if __name__ == "__main__":
     Thread(target=run_flask, daemon=True).start()
     token = os.environ.get('DISCORD_TOKEN')
     if token:
-        bot.run(token, log_handler=None)
+        try:
+            bot.run(token, log_handler=None)
+        except:
+            sys.exit(1)
