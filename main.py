@@ -14,7 +14,6 @@ def home(): return "Bot is Online"
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
-    print(f"Flask starting on port {port}")
     serve(app, host='0.0.0.0', port=port)
 
 # --- BOT CONFIG ---
@@ -81,15 +80,8 @@ if __name__ == "__main__":
     t.start()
     
     token = os.environ.get('DISCORD_TOKEN')
-    
-    if not token:
-        print("❌ ERROR: 'DISCORD_TOKEN' variable is missing in Render settings!")
-        sys.exit(1)
-
-    try:
-        print("🚀 Attempting to start bot...")
+    if token:
         bot.run(token)
-    except discord.errors.PrivilegedIntentsRequired:
-        print("❌ ERROR: You must enable 'SERVER MEMBERS INTENT' in the Discord Developer Portal!")
-    except Exception as e:
-        print(f"❌ FATAL ERROR: {e}")
+    else:
+        print("ERROR: DISCORD_TOKEN missing")
+        sys.exit(1)
